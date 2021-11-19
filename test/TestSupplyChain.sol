@@ -1,11 +1,12 @@
-pragma solidity ^0.4.24;
+pragma solidity >= 0.5.0 < 0.6.0;
 
 import "truffle/Assert.sol";
 import "truffle/DeployedAddresses.sol";
+import "../contracts/SupplyChainState.sol";
 import "../contracts/SupplyChain.sol";
 
 
-contract TestSupplyChain {
+contract TestSupplyChain is SupplyChainState {
     uint public initialBalance = 1 ether;
 
     SupplyChain public chain;
@@ -13,17 +14,12 @@ contract TestSupplyChain {
     Proxy public buyActor;
     Proxy public randomActor;
 
-    // A fragile dependency here.  Would be nice to import this from a contract
-    // This has to continuously stay synced with the contract being tested
-    //
-    enum State { ForSale, Sold, Shipped, Received }
-
     string itemName = "Gem";
     uint256 itemPrice = 3;
     uint256 itemSku = 0; // the sku will be set to 0
 
     // allow contract to receive ether
-    function() public payable {}
+    function() external payable {}
 
     function beforeEach() public
     {
@@ -52,7 +48,7 @@ contract TestSupplyChain {
         public
     {
         Assert.notEqual(address(buyActor), address(sellActor), "buyer and seller should be different");
-        Assert.equal(address(chain), sellActor.getTarget(), "chain is the target");
+        Assert.equal(address(chain), address(sellActor.getTarget()), "chain is the target");
     }
 
     function testItemCanBePutOnSale()
@@ -80,7 +76,7 @@ contract TestSupplyChain {
     }
 
     function getItemState(uint256 _expectedSku)
-        public constant
+        public view
         returns (uint256)
     {
         string memory name;
@@ -223,47 +219,47 @@ contract TestSupplyChain {
 // Proxy contract Actors for buying and selling
 //
 contract Proxy {
-    address public target;
+    SupplyChain public target;
 
-    constructor(address _target) public { target = _target; }
+    constructor(SupplyChain _target) public { target = _target; }
 
     // Allow contract to receive ether
-    function() public payable {}
+    function() external payable {}
 
     function getTarget()
-        public constant
-        returns (address)
+        public view
+        returns (SupplyChain)
     {
         return target;
     }
 
-    function sell(string itemName, uint256 itemPrice)
+    function sell(string memory itemName, uint256 itemPrice)
         public
     {
-        SupplyChain(target).addItem(itemName, itemPrice);
+        target.addItem(itemName, itemPrice);
     }
 
     function buy(uint256 sku, uint256 offer)
         public
         returns (bool)
     {
-        // solhint-disable-next-line
-        return address(target).call.value(offer)(abi.encodeWithSignature("buyItem(uint256)", sku));
+        (bool success, ) = address(target).call.value(offer)(abi.encodeWithSignature("buyItem(uint256)", sku));
+        return success;
     }
 
     function ship(uint256 sku)
         public
         returns (bool)
     {
-        // solhint-disable-next-line
-        return address(target).call(abi.encodeWithSignature("shipItem(uint256)", sku));
+        (bool success, ) = address(target).call(abi.encodeWithSignature("shipItem(uint256)", sku));
+        return success;
     }
 
     function receive(uint256 sku)
         public
         returns (bool)
     {
-        // solhint-disable-next-line
-        return address(target).call(abi.encodeWithSignature("receiveItem(uint256)", sku));
+        (bool success, ) = address(target).call(abi.encodeWithSignature("receiveItem(uint256)", sku));
+        return success;
     }
 }
